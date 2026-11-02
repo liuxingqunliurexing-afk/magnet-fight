@@ -1,0 +1,141 @@
+/**
+ * Player.c
+ * マグネットファイト - プレイヤー入力・移動処理モジュール（マップ配列管理版）
+ * 
+ * 担当: 操作担当
+ * 役割: 2次元マップ配列を参照した移動・障害物判定、キーボード入力処理
+ */
+
+#include <stdio.h>
+#include <stdbool.h>
+#include <conio.h> // Windows環境でのキー入力用 (_kbhit, _getch)
+
+// マップの定数定義
+#define MAP_WIDTH  10
+#define MAP_HEIGHT 10
+
+// マップのマス目タイプ定義
+typedef enum {
+    TILE_EMPTY, // 通常の床 (0)
+    TILE_WALL,  // 移動不可の壁 (1)
+    TILE_HOLE,  // 穴 (2)
+    TILE_SPIKE  // トゲ (3)
+} TileType;
+
+// 盤面（マップデータ配列）
+static int stage_map[MAP_HEIGHT][MAP_WIDTH] = {
+    { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },
+    { 1, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
+    { 1, 0, 2, 0, 0, 0, 0, 2, 0, 1 },
+    { 1, 0, 0, 0, 3, 3, 0, 0, 0, 1 },
+    { 1, 0, 0, 3, 0, 0, 3, 0, 0, 1 },
+    { 1, 0, 0, 3, 0, 0, 3, 0, 0, 1 },
+    { 1, 0, 0, 0, 3, 3, 0, 0, 0, 1 },
+    { 1, 0, 2, 0, 0, 0, 0, 2, 0, 1 },
+    { 1, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
+    { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
+};
+
+// プレイヤー構造体
+typedef struct {
+    int id;             // プレイヤーID (1 ~ 4)
+    int x;              // 盤面上でのX座標 (0 ~ MAP_WIDTH-1)
+    int y;              // 盤面上でのY座標 (0 ~ MAP_HEIGHT-1)
+    int score;          // 得点
+    bool is_alive;      // 生存状態
+} Player;
+
+// プレイヤー入力構造体
+typedef struct {
+    int dx;             // X方向の移動量 (-1: 左, 1: 右, 0: 移動なし)
+    int dy;             // Y方向の移動量 (-1: 上, 1: 下, 0: 移動なし)
+    bool place_n;       // N極磁石の設置入力
+    bool place_s;       // S極磁石の設置入力
+} PlayerInput;
+
+void init_player(Player *player, int id, int start_x, int start_y) {
+    if (player == NULL) return;
+    player->id = id;
+    player->x = start_x;
+    player->y = start_y;
+    player->score = 0;
+    player->is_alive = true;
+}
+
+// 盤面配列を参照して、移動可能かチェックする関数
+static bool is_walkable(int x, int y) {
+    if (x < 0 || x >= MAP_WIDTH || y < 0 || y >= MAP_HEIGHT) return false;
+    if (stage_map[y][x] == TILE_WALL) return false; // 壁は通行不可
+    return true;
+}
+
+// キーボード/Joy-Con入力に基づくプレイヤー移動処理
+void move_player(Player *player, PlayerInput input) {
+    if (player == NULL || !player->is_alive) return;
+    if (input.dx == 0 && input.dy == 0) return;
+
+    int next_x = player->x + input.dx;
+    int next_y = player->y + input.dy;
+
+    if (is_walkable(next_x, next_y)) {
+        player->x = next_x;
+        player->y = next_y;
+    }
+}
+
+// マップ表示関数
+void draw_map(Player *p) {
+    printf("\033[H\033[J");
+    printf("=== MAGNET FIGHT (Map Array Version) ===\n");
+    printf("凡例: [P]: プレイヤー  [.]: 床  [#]: 壁  [O]: 穴  [X]: トゲ\n\n");
+
+    for (int y = 0; y < MAP_HEIGHT; y++) {
+        for (int x = 0; x < MAP_WIDTH; x++) {
+            if (p->x == x && p->y == y) {
+                printf(" P ");
+            } else {
+                switch (stage_map[y][x]) {
+                    case TILE_EMPTY: printf(" . "); break;
+                    case TILE_WALL:  printf(" # "); break;
+                    case TILE_HOLE:  printf(" O "); break;
+                    case TILE_SPIKE: printf(" X "); break;
+                }
+            }
+        }
+        printf("\n");
+    }
+}
+
+int main() {
+    Player p1;
+    init_player(&p1, 1, 1, 1);
+
+    bool running = true;
+    while (running) {
+        draw_map(&p1);
+
+        PlayerInput input = {0, 0, false, false};
+        if (_kbhit()) {
+            int ch = _getch();
+            if (ch == 224 || ch == 0) {
+                ch = _getch();
+                switch (ch) {
+                    case 72: input.dy = -1; break; // 上
+                    case 80: input.dy = 1;  break; // 下
+                    case 75: input.dx = -1; break; // 左
+                    case 77: input.dx = 1;  break; // 右
+                }
+            } else {
+                switch (ch) {
+                    case 'w': case 'W': input.dy = -1; break;
+                    case 's': case 'S': input.dy = 1;  break;
+                    case 'a': case 'A': input.dx = -1; break;
+                    case 'd': case 'D': input.dx = 1;  break;
+                    case 27:  running = false; break; // ESC
+                }
+            }
+            move_player(&p1, input);
+        }
+    }
+    return 0;
+}
