@@ -1,5 +1,5 @@
 /**
- * player.c (common.h 準拠・クライアント移動テスト版)
+ * player.c (common.h 準拠・クライアント移動テスト版 + Joy-Con対応)
  * マグネットファイト - 操作・画面描画モジュール
  */
 
@@ -9,12 +9,15 @@
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <SDL2/SDL.h>
 
 #include "../include/common.h"
+#include "player.h"
 
 #define MAP_WIDTH  10
 #define MAP_HEIGHT 10
 #define PORT 12345
+#define STICK_THRESHOLD 16384 // アナログスティックの判定閾値 (-32768 〜 32768)
 
 // マップのマス目タイプ定義
 typedef enum {
@@ -37,14 +40,53 @@ static int stage_map[MAP_HEIGHT][MAP_WIDTH] = {
     { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
 };
 
-// キーボード入力から common.h の PlayerInput を生成する
-PlayerInput get_player_input(int my_id) {
+// キーボードおよび Joy-Con (SDL GameController) から common.h の PlayerInput を生成する
+PlayerInput get_player_input(int my_id, SDL_GameController *controller) {
     PlayerInput input;
     input.player_id = my_id;
     input.dx = 0;
     input.dy = 0;
     input.place_magnet = 0; // 今回は磁石なし
 
+    // 1. SDL イベント処理 (Joy-Con やウィンドウのイベント)
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_CONTROLLERAXISMOTION) {
+            // スティック入力の処理 (左スティック)
+            if (event.caxis.axis == SDL_CONTROLLER_AXIS_LEFTX) {
+                if (event.caxis.value > STICK_THRESHOLD) input.dx = 1;
+                else if (event.caxis.value < -STICK_THRESHOLD) input.dx = -1;
+            } else if (event.caxis.axis == SDL_CONTROLLER_AXIS_LEFTY) {
+                if (event.caxis.value > STICK_THRESHOLD) input.dy = 1;
+                else if (event.caxis.value < -STICK_THRESHOLD) input.dy = -1;
+            }
+        } else if (event.type == SDL_CONTROLLERBUTTONDOWN) {
+            // 十字キー (D-Pad) の処理
+            switch (event.cbutton.button) {
+                case SDL_CONTROLLER_BUTTON_DPAD_UP:    input.dy = -1; break;
+                case SDL_CONTROLLER_BUTTON_DPAD_DOWN:  input.dy = 1;  break;
+                case SDL_CONTROLLER_BUTTON_DPAD_LEFT:  input.dx = -1; break;
+                case SDL_CONTROLLER_BUTTON_DPAD_RIGHT: input.dx = 1;  break;
+            }
+        }
+    }
+
+    // SDLのコントローラーが接続されている場合、ポーリングでも状態を確認
+    if (controller) {
+        if (SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_UP))    input.dy = -1;
+        if (SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_DOWN))  input.dy = 1;
+        if (SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_LEFT))  input.dx = -1;
+        if (SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) input.dx = 1;
+
+        Sint16 x = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX);
+        Sint16 y = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY);
+        if (x > STICK_THRESHOLD) input.dx = 1;
+        else if (x < -STICK_THRESHOLD) input.dx = -1;
+        if (y > STICK_THRESHOLD) input.dy = 1;
+        else if (y < -STICK_THRESHOLD) input.dy = -1;
+    }
+
+    // 2. キーボード入力の取得 (環境に合わせて _kbhit / _getch が使えない場合のフォールバックや従来処理)
     if (_kbhit()) {
         int ch = _getch();
         if (ch == 224 || ch == 0) {
@@ -64,14 +106,15 @@ PlayerInput get_player_input(int my_id) {
             }
         }
     }
+
     return input;
 }
 
 // サーバーから受信した GameState を画面に描画する
 void draw_game_screen(const GameState *state, int my_id) {
     printf("\033[H\033[J");
-    printf("=== MAGNET FIGHT (Client: P%d) ===\n", my_id);
-    printf("操作: WASD or 矢印キー | 終了: Ctrl+C\n\n");
+    printf("=== MAGNET FIGHT (Client: P%d) [Joy-Con Enabled] ===\n", my_id);
+    printf("操作: Joy-Con (スティック/十字キー) or WASD | 終了: Ctrl+C\n\n");
 
     for (int y = 0; y < MAP_HEIGHT; y++) {
         for (int x = 0; x < MAP_WIDTH; x++) {
@@ -110,13 +153,33 @@ void draw_game_screen(const GameState *state, int my_id) {
 }
 
 int main(int argc, char *argv[]) {
-    // 起動時に自分のプレイヤーIDを引数で指定できるようにする (例: ./client_app 0 または 1)
     int my_id = (argc > 1) ? atoi(argv[1]) : 0;
     const char *server_ip = "127.0.0.1";
+
+    // SDL2 とゲームコントローラーサブシステムの初期化
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMECONTROLLER) < 0) {
+        fprintf(stderr, "SDL could not initialize! SDL_Error: %s\n", SDL_GetError());
+    }
+
+    // 接続されているコントローラー（Joy-Conなど）の検出とオープン
+    SDL_GameController *controller = NULL;
+    for (int i = 0; i < SDL_NumJoysticks(); i++) {
+        if (SDL_IsGameController(i)) {
+            controller = SDL_GameControllerOpen(i);
+            if (controller) {
+                printf("Joy-Con / Controller connected: %s\n", SDL_GameControllerName(controller));
+                break;
+            }
+        }
+    }
+    if (!controller) {
+        printf("No Joy-Con / GameController detected. (Keyboard only mode)\n");
+    }
 
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
         perror("socket failed");
+        SDL_Quit();
         exit(1);
     }
 
@@ -127,14 +190,16 @@ int main(int argc, char *argv[]) {
 
     if (connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
         perror("connection failed (サーバーが起動していません)");
+        if (controller) SDL_GameControllerClose(controller);
+        SDL_Quit();
         exit(1);
     }
 
     printf("Connected to server as Player %d\n", my_id);
 
     while (1) {
-        // 1. キーボード入力を取得してサーバーへ送信
-        PlayerInput input = get_player_input(my_id);
+        // 1. コントローラーおよびキーボード入力を取得してサーバーへ送信
+        PlayerInput input = get_player_input(my_id, controller);
         ClientPacket cpkt;
         cpkt.type = PACKET_INPUT;
         cpkt.input = input;
@@ -153,6 +218,10 @@ int main(int argc, char *argv[]) {
         usleep(30000); // 約30FPS相当のウェイト
     }
 
+    if (controller) {
+        SDL_GameControllerClose(controller);
+    }
+    SDL_Quit();
     close(sock);
     return 0;
 }
