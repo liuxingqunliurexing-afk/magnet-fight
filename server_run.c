@@ -41,11 +41,12 @@ int main(void) {
     bind(server_sock, (struct sockaddr *)&server_addr, sizeof(server_addr));
     listen(server_sock, MAX_PLAYERS);
 
-    printf("=== Magnet Fight Server Started (Port: %d) ===\n", PORT);
+    printf("=== Magnet Fight Server (Magnet Add) Started (Port: %d) ===\n", PORT);
 
     GameState game_state;
     memset(&game_state, 0, sizeof(GameState));
     game_state.game_status = GAME_STATE_PLAYING;
+    game_state.magnet_count = 0;
     
     // 4人分の初期位置
     float start_x[4] = {1.0f, 8.0f, 1.0f, 8.0f};
@@ -95,13 +96,30 @@ int main(void) {
                         client_socks[i] = -1;
                     } else {
                         int id = cpkt.input.player_id;
-                        int nx = (int)game_state.players[id].x + cpkt.input.dx;
-                        int ny = (int)game_state.players[id].y + cpkt.input.dy;
+                        
+                        // 1. 移動処理
+                        if (cpkt.input.dx != 0 || cpkt.input.dy != 0) {
+                            int nx = (int)game_state.players[id].x + cpkt.input.dx;
+                            int ny = (int)game_state.players[id].y + cpkt.input.dy;
+                            if (stage_map[ny][nx] != 1) { // 壁でなければ移動
+                                game_state.players[id].x = (float)nx;
+                                game_state.players[id].y = (float)ny;
+                            }
+                        }
 
-                        // 壁（1）でなければ移動を反映
-                        if (stage_map[ny][nx] != 1) {
-                            game_state.players[id].x = (float)nx;
-                            game_state.players[id].y = (float)ny;
+                        // 2. 磁石設置処理 (place_magnet: 1=N極, 2=S極)
+                        if (cpkt.input.place_magnet > 0) {
+                            if (game_state.magnet_count < MAX_MAGNETS) {
+                                int m_idx = game_state.magnet_count;
+                                game_state.magnets[m_idx].id = m_idx;
+                                game_state.magnets[m_idx].x = game_state.players[id].x;
+                                game_state.magnets[m_idx].y = game_state.players[id].y;
+                                game_state.magnets[m_idx].type = (cpkt.input.place_magnet == 1) ? MAGNET_N : MAGNET_S;
+                                game_state.magnets[m_idx].owner_id = id;
+                                game_state.magnet_count++;
+                                printf("Player %d placed Magnet type %d at (%.0f, %.0f)\n", 
+                                    id, cpkt.input.place_magnet, game_state.players[id].x, game_state.players[id].y);
+                            }
                         }
                     }
                 }

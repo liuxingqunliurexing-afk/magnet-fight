@@ -67,7 +67,7 @@ PlayerInput get_player_input(int my_id) {
     input.player_id = my_id;
     input.dx = 0;
     input.dy = 0;
-    input.place_magnet = 0;
+    input.place_magnet = 0; // 初期値: 置かない
 
     if (_kbhit()) {
         int ch = _getch();
@@ -76,6 +76,8 @@ PlayerInput get_player_input(int my_id) {
             case 's': case 'S': input.dy = 1;  break;
             case 'a': case 'A': input.dx = -1; break;
             case 'd': case 'D': input.dx = 1;  break;
+            case 'e': case 'E': input.place_magnet = 1; break; // Eキー: N極設置
+            case 'q': case 'Q': input.place_magnet = 2; break; // Qキー: S極設置
         }
     }
     return input;
@@ -84,10 +86,11 @@ PlayerInput get_player_input(int my_id) {
 void draw_game_screen(const GameState *state, int my_id) {
     printf("\033[H\033[J");
     printf("=== MAGNET FIGHT (Client: P%d) ===\n", my_id);
-    printf("操作: W / A / S / D キー\n\n");
+    printf("移動: W/A/S/D | 磁石設置: [E] N極, [Q] S極\n\n");
 
     for (int y = 0; y < MAP_HEIGHT; y++) {
         for (int x = 0; x < MAP_WIDTH; x++) {
+            // 1. プレイヤーがいるかチェック
             int player_on_pos = -1;
             for (int i = 0; i < MAX_PLAYERS; i++) {
                 if (state->players[i].is_alive &&
@@ -98,8 +101,21 @@ void draw_game_screen(const GameState *state, int my_id) {
                 }
             }
 
+            // 2. 磁石があるかチェック
+            int magnet_type = 0;
+            for (int m = 0; m < state->magnet_count; m++) {
+                if ((int)state->magnets[m].x == x && (int)state->magnets[m].y == y) {
+                    magnet_type = state->magnets[m].type; // MAGNET_N (1) or MAGNET_S (2)
+                    break;
+                }
+            }
+
             if (player_on_pos != -1) {
                 printf(" P%d", player_on_pos);
+            } else if (magnet_type == MAGNET_N) {
+                printf(" [N]");
+            } else if (magnet_type == MAGNET_S) {
+                printf(" [S]");
             } else {
                 switch (stage_map[y][x]) {
                     case 0: printf(" . "); break;
@@ -112,6 +128,8 @@ void draw_game_screen(const GameState *state, int my_id) {
         }
         printf("\n");
     }
+
+    fflush(stdout);
 }
 
 int main(int argc, char *argv[]) {
