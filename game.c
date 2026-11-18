@@ -3,16 +3,18 @@
 #include "../include/magnet.h"
 
 static int stage_map[MAP_HEIGHT][MAP_WIDTH] = {
-    { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },
-    { 1, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
-    { 1, 0, 2, 0, 0, 0, 0, 2, 0, 1 },
-    { 1, 0, 0, 0, 3, 3, 0, 0, 0, 1 },
-    { 1, 0, 0, 3, 0, 0, 3, 0, 0, 1 },
-    { 1, 0, 0, 3, 0, 0, 3, 0, 0, 1 },
-    { 1, 0, 0, 0, 3, 3, 0, 0, 0, 1 },
-    { 1, 0, 2, 0, 0, 0, 0, 2, 0, 1 },
-    { 1, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
-    { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
+    { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 },
+    { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
+    { 1, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 1 },
+    { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
+    { 1, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 1 },
+    { 1, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 1 },
+    { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
+    { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
+    { 1, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 1 },
+    { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
+    { 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 },
+    { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
 };
 
 int get_tile_type(int x, int y) {
@@ -25,8 +27,9 @@ void init_game_state(GameState *state) {
     state->game_status = GAME_STATE_PLAYING;
     state->magnet_count = 0;
 
-    float start_x[4] = {1.0f, 8.0f, 1.0f, 8.0f};
-    float start_y[4] = {1.0f, 1.0f, 8.0f, 8.0f};
+    // 12x12マップの四隅にプレイヤーの初期位置を配置
+    float start_x[4] = {1.0f, 10.0f, 1.0f, 10.0f};
+    float start_y[4] = {1.0f, 1.0f, 10.0f, 10.0f};
     for (int i = 0; i < MAX_PLAYERS; i++) {
         state->players[i].id = i;
         state->players[i].x = start_x[i];
@@ -58,13 +61,13 @@ void update_game_state(GameState *state, const PlayerInput inputs[]) {
     // 2. 磁力演算
     apply_magnetic_forces(state);
 
-    // 3. 落下・トラップ判定
+    // 3. 落下判定（穴に落ちたら死亡）
     for (int i = 0; i < MAX_PLAYERS; i++) {
         if (!state->players[i].is_alive) continue;
         int cx = (int)state->players[i].x;
         int cy = (int)state->players[i].y;
         int tile = get_tile_type(cx, cy);
-        if (tile == 2 || tile == 3) {
+        if (tile == TILE_HOLE) {
             state->players[i].is_alive = 0;
         }
     }

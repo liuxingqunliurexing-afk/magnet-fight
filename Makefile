@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -O2 -Iinclude
-LDFLAGS = -lSDL2 -lm
+LDFLAGS = -lSDL2 -lSDL2_image -lm
 
 TARGET = magnet_app
 

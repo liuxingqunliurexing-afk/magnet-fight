@@ -37,7 +37,8 @@ void run_server(void) {
             }
         }
 
-        struct timeval timeout = {0, 16000};
+        // タイムアウトを0にして、selectによる無駄なブロックや遅延を排除
+        struct timeval timeout = {0, 0};
         int activity = select(max_sd + 1, &read_fds, NULL, NULL, &timeout);
 
         PlayerInput inputs[MAX_PLAYERS];
@@ -91,6 +92,7 @@ void run_server(void) {
             }
         }
 
+        // フレームレートを安定させるためのウェイト (約60FPS)
         usleep(16000);
     }
     close(server_sock);

@@ -3,14 +3,13 @@
 
 #include "common.h"
 
-#define MAP_WIDTH  10
-#define MAP_HEIGHT 10
+#define MAP_WIDTH  12
+#define MAP_HEIGHT 12
 
 typedef enum {
     TILE_EMPTY,
     TILE_WALL,
-    TILE_HOLE,
-    TILE_SPIKE
+    TILE_HOLE
 } TileType;
 
 void init_game_state(GameState *state);
